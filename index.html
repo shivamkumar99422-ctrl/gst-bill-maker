@@ -666,7 +666,12 @@
           <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
           Live A4 Sheet Output (Calculated in real-time)
         </span>
-        <span class="text-slate-400 text-[11px]">Centered & scaled to A4</span>
+        <div class="flex items-center gap-2">
+          <button onclick="openHistoryModal()" class="px-2.5 py-1 text-[11px] font-bold bg-indigo-100 hover:bg-indigo-200 text-indigo-800 rounded-md border border-indigo-300 transition flex items-center gap-1 shadow-sm">
+            📂 View Saved Bills (<span id="previewHistoryCount">0</span>)
+          </button>
+          <span class="text-slate-400 text-[11px] hidden sm:inline">Centered & scaled to A4</span>
+        </div>
       </div>
 
       <!-- INVOICE SHEET TO PRINT / EXPORT -->
@@ -1068,8 +1073,66 @@
 
     let items = [];
 
+    // Local Storage persistent keys
+    const LOCAL_STORAGE_KEY = 'gst_invoice_saved_state_v1';
+    const BILL_HISTORY_KEY = 'gst_invoice_bill_history_v1';
+    const CATALOG_KEY = 'gst_invoice_saved_catalog_v1';
+
+    function saveHistoryToStorage() {
+      try {
+        localStorage.setItem(BILL_HISTORY_KEY, JSON.stringify(billHistory));
+      } catch (e) {
+        console.warn('History storage write error:', e);
+      }
+    }
+
+    function loadHistoryFromStorage() {
+      try {
+        const raw = localStorage.getItem(BILL_HISTORY_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) return parsed;
+        }
+      } catch (e) {
+        console.warn('History storage read error:', e);
+      }
+      return null;
+    }
+
+    function saveCatalogToStorage() {
+      try {
+        localStorage.setItem(CATALOG_KEY, JSON.stringify(savedCatalog));
+      } catch (e) {
+        console.warn('Catalog storage write error:', e);
+      }
+    }
+
+    function loadCatalogFromStorage() {
+      try {
+        const raw = localStorage.getItem(CATALOG_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch (e) {
+        console.warn('Catalog storage read error:', e);
+      }
+      return null;
+    }
+
     window.addEventListener('DOMContentLoaded', () => {
-      // Check if user has previously entered data in local storage
+      // 1. Immediately load protected Bill History & Catalog from dedicated storage
+      const storedHistory = loadHistoryFromStorage();
+      if (storedHistory) {
+        billHistory = storedHistory;
+      }
+
+      const storedCatalog = loadCatalogFromStorage();
+      if (storedCatalog) {
+        savedCatalog = storedCatalog;
+      }
+
+      // 2. Load form inputs state
       const localData = loadFromLocalStorage();
       if (localData) {
         restoreFromStateObject(localData);
@@ -1085,9 +1148,6 @@
         }
       });
     });
-
-    // Local Storage instant persistence keys
-    const LOCAL_STORAGE_KEY = 'gst_invoice_saved_state_v1';
 
     function saveToLocalStorage(payload) {
       try {
@@ -1118,6 +1178,10 @@
 
     // Persist complete bill form state, catalog, and bill history to both LocalStorage & Cloud
     function saveActiveStateToCloud() {
+      // Always ensure history and catalog are synchronously secured
+      saveHistoryToStorage();
+      saveCatalogToStorage();
+
       const payload = {
         formData: {
           bizName: document.getElementById('inpBizName').value,
@@ -1148,10 +1212,10 @@
         savedCatalog: savedCatalog
       };
 
-      // 1. Immediately save locally so refreshing the tab NEVER clears anything
+      // Save active form state locally
       saveToLocalStorage(payload);
 
-      // 2. Also sync to cloud storage if connected
+      // Also sync to cloud storage if connected
       if (typeof window.syncToCloudStorage === 'function') {
         window.syncToCloudStorage(payload);
       }
@@ -1163,9 +1227,11 @@
 
       if (data.savedCatalog && Array.isArray(data.savedCatalog) && data.savedCatalog.length > 0) {
         savedCatalog = data.savedCatalog;
+        saveCatalogToStorage();
       }
-      if (data.billHistory && Array.isArray(data.billHistory)) {
+      if (data.billHistory && Array.isArray(data.billHistory) && data.billHistory.length > 0) {
         billHistory = data.billHistory;
+        saveHistoryToStorage();
       }
 
       if (data.formData) {
@@ -1230,7 +1296,7 @@
 
     // Reset all form inputs and item rows back to original sample data
     function resetToSample() {
-      // Clear stored local storage state on manual reset
+      // Clear only the active form input state, NEVER the saved bill history
       try {
         localStorage.removeItem(LOCAL_STORAGE_KEY);
       } catch (e) {}
@@ -1261,7 +1327,7 @@
       renderItemInputs();
       renderInvoice();
       triggerAutoSave();
-      showToast('Loaded sample bill data');
+      showToast('Loaded sample bill data (Bill History preserved)');
     }
 
     // Switch between the various pure black & white design templates
@@ -1284,8 +1350,10 @@
     function updateBadgeCounts() {
       const hBadge = document.getElementById('historyCountBadge');
       const lBadge = document.getElementById('libraryCountBadge');
+      const pBadge = document.getElementById('previewHistoryCount');
       if (hBadge) hBadge.textContent = billHistory.length;
       if (lBadge) lBadge.textContent = savedCatalog.length;
+      if (pBadge) pBadge.textContent = billHistory.length;
     }
 
     // Save current bill to history
@@ -1325,9 +1393,11 @@
       };
 
       billHistory.unshift(billSnapshot);
+      // Immediately and synchronously save to dedicated storage
+      saveHistoryToStorage();
       updateBadgeCounts();
-      triggerAutoSave();
-      showToast(`Bill #${invNo} saved to history!`);
+      saveActiveStateToCloud();
+      showToast(`Bill #${invNo} saved permanently! Accessible anytime in Bill History.`);
     }
 
     // Load saved bill into the generator
@@ -1369,9 +1439,11 @@
     function deleteSavedBill(id, event) {
       if (event) event.stopPropagation();
       billHistory = billHistory.filter(b => b.id !== id);
+      // Immediately and synchronously write to storage
+      saveHistoryToStorage();
       updateBadgeCounts();
       renderHistoryList();
-      triggerAutoSave();
+      saveActiveStateToCloud();
       showToast('Bill removed from history');
     }
 
@@ -1482,9 +1554,10 @@
       document.getElementById('catHsn').value = '';
       document.getElementById('catRate').value = '';
 
+      saveCatalogToStorage();
       updateBadgeCounts();
       renderCatalogList();
-      triggerAutoSave();
+      saveActiveStateToCloud();
       showToast(`Added "${desc}" to catalog!`);
     }
 
@@ -1510,9 +1583,10 @@
     function deleteCatalogItem(id, event) {
       if (event) event.stopPropagation();
       savedCatalog = savedCatalog.filter(c => c.id !== id);
+      saveCatalogToStorage();
       updateBadgeCounts();
       renderCatalogList();
-      triggerAutoSave();
+      saveActiveStateToCloud();
       showToast('Item removed from catalog');
     }
 
@@ -1572,8 +1646,9 @@
         rate: it.rate || 0,
         gstRate: it.gstRate || 0
       });
+      saveCatalogToStorage();
       updateBadgeCounts();
-      triggerAutoSave();
+      saveActiveStateToCloud();
       showToast(`Saved "${it.desc}" to catalog!`);
     }
 
