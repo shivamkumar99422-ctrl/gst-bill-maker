@@ -1069,7 +1069,13 @@
     let items = [];
 
     window.addEventListener('DOMContentLoaded', () => {
-      resetToSample();
+      // Check if user has previously entered data in local storage
+      const localData = loadFromLocalStorage();
+      if (localData) {
+        restoreFromStateObject(localData);
+      } else {
+        resetToSample();
+      }
       updateBadgeCounts();
 
       // Listen for cloud storage state restoration
@@ -1080,19 +1086,38 @@
       });
     });
 
+    // Local Storage instant persistence keys
+    const LOCAL_STORAGE_KEY = 'gst_invoice_saved_state_v1';
+
+    function saveToLocalStorage(payload) {
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(payload));
+      } catch (e) {
+        console.warn('Local storage write notice:', e);
+      }
+    }
+
+    function loadFromLocalStorage() {
+      try {
+        const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (raw) return JSON.parse(raw);
+      } catch (e) {
+        console.warn('Local storage read notice:', e);
+      }
+      return null;
+    }
+
     // Auto-save debounce helper to prevent excessive writes
     let autoSaveTimer = null;
     function triggerAutoSave() {
       clearTimeout(autoSaveTimer);
       autoSaveTimer = setTimeout(() => {
         saveActiveStateToCloud();
-      }, 700);
+      }, 300);
     }
 
-    // Persist complete bill form state, catalog, and bill history
+    // Persist complete bill form state, catalog, and bill history to both LocalStorage & Cloud
     function saveActiveStateToCloud() {
-      if (typeof window.syncToCloudStorage !== 'function') return;
-
       const payload = {
         formData: {
           bizName: document.getElementById('inpBizName').value,
@@ -1123,22 +1148,28 @@
         savedCatalog: savedCatalog
       };
 
-      window.syncToCloudStorage(payload);
+      // 1. Immediately save locally so refreshing the tab NEVER clears anything
+      saveToLocalStorage(payload);
+
+      // 2. Also sync to cloud storage if connected
+      if (typeof window.syncToCloudStorage === 'function') {
+        window.syncToCloudStorage(payload);
+      }
     }
 
-    // Restore saved data from cloud
-    function restoreFromCloudData(cloud) {
-      if (!cloud) return;
+    // Restore saved data from state object (used for both localStorage and Cloud)
+    function restoreFromStateObject(data) {
+      if (!data) return;
 
-      if (cloud.savedCatalog && Array.isArray(cloud.savedCatalog) && cloud.savedCatalog.length > 0) {
-        savedCatalog = cloud.savedCatalog;
+      if (data.savedCatalog && Array.isArray(data.savedCatalog) && data.savedCatalog.length > 0) {
+        savedCatalog = data.savedCatalog;
       }
-      if (cloud.billHistory && Array.isArray(cloud.billHistory)) {
-        billHistory = cloud.billHistory;
+      if (data.billHistory && Array.isArray(data.billHistory)) {
+        billHistory = data.billHistory;
       }
 
-      if (cloud.formData) {
-        const d = cloud.formData;
+      if (data.formData) {
+        const d = data.formData;
         if (d.bizName !== undefined) document.getElementById('inpBizName').value = d.bizName;
         if (d.bizAddr1 !== undefined) document.getElementById('inpBizAddr1').value = d.bizAddr1;
         if (d.bizAddr2 !== undefined) document.getElementById('inpBizAddr2').value = d.bizAddr2;
@@ -1183,8 +1214,8 @@
         }
       }
 
-      if (cloud.items && Array.isArray(cloud.items) && cloud.items.length > 0) {
-        items = cloud.items;
+      if (data.items && Array.isArray(data.items) && data.items.length > 0) {
+        items = data.items;
       }
 
       renderItemInputs();
@@ -1192,8 +1223,18 @@
       updateBadgeCounts();
     }
 
+    // Restore saved data from cloud
+    function restoreFromCloudData(cloud) {
+      restoreFromStateObject(cloud);
+    }
+
     // Reset all form inputs and item rows back to original sample data
     function resetToSample() {
+      // Clear stored local storage state on manual reset
+      try {
+        localStorage.removeItem(LOCAL_STORAGE_KEY);
+      } catch (e) {}
+
       document.getElementById('inpBizName').value = defaultData.bizName;
       document.getElementById('inpBizAddr1').value = defaultData.bizAddr1;
       document.getElementById('inpBizAddr2').value = defaultData.bizAddr2;
