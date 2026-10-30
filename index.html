@@ -1225,13 +1225,21 @@
     function restoreFromStateObject(data) {
       if (!data) return;
 
+      // PROTECT CATALOG: Never overwrite with empty
       if (data.savedCatalog && Array.isArray(data.savedCatalog) && data.savedCatalog.length > 0) {
         savedCatalog = data.savedCatalog;
         saveCatalogToStorage();
       }
+      
+      // PROTECT BILL HISTORY: Only merge or replace if incoming has actual bills. Never wipe existing!
       if (data.billHistory && Array.isArray(data.billHistory) && data.billHistory.length > 0) {
-        billHistory = data.billHistory;
-        saveHistoryToStorage();
+        // Merge without duplicates based on id
+        const existingIds = new Set(billHistory.map(b => b.id));
+        const newBills = data.billHistory.filter(b => !existingIds.has(b.id));
+        if (newBills.length > 0) {
+          billHistory = [...billHistory, ...newBills];
+          saveHistoryToStorage();
+        }
       }
 
       if (data.formData) {
@@ -1392,10 +1400,19 @@
         }
       };
 
+      // Always reload latest saved bills from disk first to prevent overwriting
+      const currentOnDisk = loadHistoryFromStorage();
+      if (currentOnDisk && Array.isArray(currentOnDisk)) {
+        billHistory = currentOnDisk;
+      }
+
       billHistory.unshift(billSnapshot);
-      // Immediately and synchronously save to dedicated storage
+      
+      // Save directly to localStorage immediately
       saveHistoryToStorage();
       updateBadgeCounts();
+      
+      // Also background save
       saveActiveStateToCloud();
       showToast(`Bill #${invNo} saved permanently! Accessible anytime in Bill History.`);
     }
