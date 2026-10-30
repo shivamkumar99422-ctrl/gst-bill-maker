@@ -8,6 +8,98 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- html2pdf.js for direct client-side PDF downloads -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <!-- Firebase SDK Modules for Cloud Persistence -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // Fallback default config if not injected by environment
+    const defaultFirebaseConfig = {
+      apiKey: "AIzaSyDummyKeyForFallbackOnly",
+      authDomain: "invoice-maker-fallback.firebaseapp.com",
+      projectId: "invoice-maker-fallback",
+      storageBucket: "invoice-maker-fallback.appspot.com",
+      messagingSenderId: "123456789",
+      appId: "1:123456789:web:abcdef"
+    };
+
+    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : defaultFirebaseConfig;
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'gst-invoice-app';
+
+    let app, auth, db, currentUser = null;
+    try {
+      app = initializeApp(firebaseConfig);
+      auth = getAuth(app);
+      db = getFirestore(app);
+
+      // Authenticate prior to any Firestore read/write
+      const initAuth = async () => {
+        try {
+          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+            await signInWithCustomToken(auth, __initial_auth_token);
+          } else {
+            await signInAnonymously(auth);
+          }
+        } catch (e) {
+          console.warn('Custom token error, falling back to anonymous auth:', e);
+          try {
+            await signInAnonymously(auth);
+          } catch (err) {
+            console.warn('Anonymous auth failed:', err);
+          }
+        }
+      };
+
+      initAuth();
+
+      onAuthStateChanged(auth, async (user) => {
+        if (user) {
+          currentUser = user;
+          window._cloudUserId = user.uid;
+          window._cloudDb = db;
+          window._cloudAppId = appId;
+          window.dispatchEvent(new CustomEvent('cloud-auth-ready', { detail: { uid: user.uid } }));
+          // Listen to user's saved data document
+          subscribeToCloudData(user.uid);
+        }
+      });
+    } catch (err) {
+      console.warn("Storage initialization notice:", err);
+    }
+
+    // Subscribe to continuous real-time sync
+    function subscribeToCloudData(uid) {
+      if (!db || !uid) return;
+      try {
+        const userDocRef = doc(db, 'artifacts', appId, 'users', uid, 'state', 'currentData');
+        onSnapshot(userDocRef, (snap) => {
+          if (snap.exists()) {
+            const data = snap.data();
+            window.dispatchEvent(new CustomEvent('cloud-data-loaded', { detail: data }));
+          }
+        }, (error) => {
+          console.warn("Snapshot notice:", error);
+        });
+      } catch (e) {
+        console.warn("Error subscribing:", e);
+      }
+    }
+
+    // Expose global cloud sync function to window
+    window.syncToCloudStorage = async function(payload) {
+      if (!db || !currentUser) return;
+      try {
+        const userDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'state', 'currentData');
+        await setDoc(userDocRef, {
+          ...payload,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (err) {
+        console.warn("Sync error:", err);
+      }
+    };
+  </script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
@@ -327,7 +419,12 @@
           ₹
         </div>
         <div>
-          <h1 class="text-sm font-bold text-slate-900 leading-none">GST Bill Generator & Live Preview</h1>
+          <div class="flex items-center gap-2">
+            <h1 class="text-sm font-bold text-slate-900 leading-none">GST Bill Generator & Live Preview</h1>
+            <span id="cloudStatusBadge" class="hidden sm:inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-200">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Auto-Saved to Cloud
+            </span>
+          </div>
           <p class="text-[11px] text-slate-500 mt-0.5">Real-time calculations with item-level GST breakdown & amount in words</p>
         </div>
       </div>
@@ -974,7 +1071,126 @@
     window.addEventListener('DOMContentLoaded', () => {
       resetToSample();
       updateBadgeCounts();
+
+      // Listen for cloud storage state restoration
+      window.addEventListener('cloud-data-loaded', (e) => {
+        if (e.detail) {
+          restoreFromCloudData(e.detail);
+        }
+      });
     });
+
+    // Auto-save debounce helper to prevent excessive writes
+    let autoSaveTimer = null;
+    function triggerAutoSave() {
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = setTimeout(() => {
+        saveActiveStateToCloud();
+      }, 700);
+    }
+
+    // Persist complete bill form state, catalog, and bill history
+    function saveActiveStateToCloud() {
+      if (typeof window.syncToCloudStorage !== 'function') return;
+
+      const payload = {
+        formData: {
+          bizName: document.getElementById('inpBizName').value,
+          bizAddr1: document.getElementById('inpBizAddr1').value,
+          bizAddr2: document.getElementById('inpBizAddr2').value,
+          bizGstin: document.getElementById('inpBizGstin').value,
+          buyerName: document.getElementById('inpBuyerName').value,
+          buyerAddr1: document.getElementById('inpBuyerAddr1').value,
+          buyerAddr2: document.getElementById('inpBuyerAddr2').value,
+          posName: document.getElementById('inpPosName').value,
+          posAddr1: document.getElementById('inpPosAddr1').value,
+          posAddr2: document.getElementById('inpPosAddr2').value,
+          invNo: document.getElementById('inpInvNo').value,
+          invDate: document.getElementById('inpInvDate').value,
+          accHolder: document.getElementById('inpAccHolder').value,
+          chequeNote: document.getElementById('inpChequeNote').value,
+          bankName: document.getElementById('inpBankName').value,
+          bankAcc: document.getElementById('inpBankAcc').value,
+          bankIfsc: document.getElementById('inpBankIfsc').value,
+          theme: document.getElementById('themeSelector').value,
+          showStamp: document.getElementById('chkShowStamp').checked,
+          stampColor: document.getElementById('stampColorSelect').value,
+          stampSize: document.getElementById('stampSizeRange').value,
+          stampAngle: document.getElementById('stampAngleRange').value
+        },
+        items: items,
+        billHistory: billHistory,
+        savedCatalog: savedCatalog
+      };
+
+      window.syncToCloudStorage(payload);
+    }
+
+    // Restore saved data from cloud
+    function restoreFromCloudData(cloud) {
+      if (!cloud) return;
+
+      if (cloud.savedCatalog && Array.isArray(cloud.savedCatalog) && cloud.savedCatalog.length > 0) {
+        savedCatalog = cloud.savedCatalog;
+      }
+      if (cloud.billHistory && Array.isArray(cloud.billHistory)) {
+        billHistory = cloud.billHistory;
+      }
+
+      if (cloud.formData) {
+        const d = cloud.formData;
+        if (d.bizName !== undefined) document.getElementById('inpBizName').value = d.bizName;
+        if (d.bizAddr1 !== undefined) document.getElementById('inpBizAddr1').value = d.bizAddr1;
+        if (d.bizAddr2 !== undefined) document.getElementById('inpBizAddr2').value = d.bizAddr2;
+        if (d.bizGstin !== undefined) document.getElementById('inpBizGstin').value = d.bizGstin;
+
+        if (d.buyerName !== undefined) document.getElementById('inpBuyerName').value = d.buyerName;
+        if (d.buyerAddr1 !== undefined) document.getElementById('inpBuyerAddr1').value = d.buyerAddr1;
+        if (d.buyerAddr2 !== undefined) document.getElementById('inpBuyerAddr2').value = d.buyerAddr2;
+
+        if (d.posName !== undefined) document.getElementById('inpPosName').value = d.posName;
+        if (d.posAddr1 !== undefined) document.getElementById('inpPosAddr1').value = d.posAddr1;
+        if (d.posAddr2 !== undefined) document.getElementById('inpPosAddr2').value = d.posAddr2;
+
+        if (d.invNo !== undefined) document.getElementById('inpInvNo').value = d.invNo;
+        if (d.invDate !== undefined) document.getElementById('inpInvDate').value = d.invDate;
+
+        if (d.accHolder !== undefined) document.getElementById('inpAccHolder').value = d.accHolder;
+        if (d.chequeNote !== undefined) document.getElementById('inpChequeNote').value = d.chequeNote;
+        if (d.bankName !== undefined) document.getElementById('inpBankName').value = d.bankName;
+        if (d.bankAcc !== undefined) document.getElementById('inpBankAcc').value = d.bankAcc;
+        if (d.bankIfsc !== undefined) document.getElementById('inpBankIfsc').value = d.bankIfsc;
+
+        if (d.theme) {
+          document.getElementById('themeSelector').value = d.theme;
+          changeTemplate(d.theme);
+        }
+        if (d.showStamp !== undefined) {
+          document.getElementById('chkShowStamp').checked = d.showStamp;
+          toggleStampVisibility(d.showStamp);
+        }
+        if (d.stampColor) {
+          document.getElementById('stampColorSelect').value = d.stampColor;
+          changeStampColor(d.stampColor);
+        }
+        if (d.stampSize) {
+          document.getElementById('stampSizeRange').value = d.stampSize;
+          updateStampSize(d.stampSize);
+        }
+        if (d.stampAngle) {
+          document.getElementById('stampAngleRange').value = d.stampAngle;
+          updateStampAngle(d.stampAngle);
+        }
+      }
+
+      if (cloud.items && Array.isArray(cloud.items) && cloud.items.length > 0) {
+        items = cloud.items;
+      }
+
+      renderItemInputs();
+      renderInvoice();
+      updateBadgeCounts();
+    }
 
     // Reset all form inputs and item rows back to original sample data
     function resetToSample() {
@@ -1003,6 +1219,7 @@
       items = JSON.parse(JSON.stringify(defaultData.items));
       renderItemInputs();
       renderInvoice();
+      triggerAutoSave();
       showToast('Loaded sample bill data');
     }
 
@@ -1010,6 +1227,7 @@
     function changeTemplate(themeClass) {
       const sheet = document.getElementById('invoiceSheet');
       sheet.className = `invoice-sheet ${themeClass} text-[11.5px] leading-tight select-none sm:select-text shadow-xl`;
+      triggerAutoSave();
     }
 
     function showToast(msg) {
@@ -1067,6 +1285,7 @@
 
       billHistory.unshift(billSnapshot);
       updateBadgeCounts();
+      triggerAutoSave();
       showToast(`Bill #${invNo} saved to history!`);
     }
 
@@ -1102,6 +1321,7 @@
       renderItemInputs();
       renderInvoice();
       closeHistoryModal();
+      triggerAutoSave();
       showToast(`Loaded Bill #${d.invNo}`);
     }
 
@@ -1110,6 +1330,7 @@
       billHistory = billHistory.filter(b => b.id !== id);
       updateBadgeCounts();
       renderHistoryList();
+      triggerAutoSave();
       showToast('Bill removed from history');
     }
 
@@ -1222,6 +1443,7 @@
 
       updateBadgeCounts();
       renderCatalogList();
+      triggerAutoSave();
       showToast(`Added "${desc}" to catalog!`);
     }
 
@@ -1240,6 +1462,7 @@
 
       renderItemInputs();
       renderInvoice();
+      triggerAutoSave();
       showToast(`Added "${item.desc}" to invoice`);
     }
 
@@ -1248,6 +1471,7 @@
       savedCatalog = savedCatalog.filter(c => c.id !== id);
       updateBadgeCounts();
       renderCatalogList();
+      triggerAutoSave();
       showToast('Item removed from catalog');
     }
 
@@ -1308,6 +1532,7 @@
         gstRate: it.gstRate || 0
       });
       updateBadgeCounts();
+      triggerAutoSave();
       showToast(`Saved "${it.desc}" to catalog!`);
     }
 
@@ -1371,6 +1596,7 @@
       items.push({ desc: "", hsn: "", qty: 1, unit: "kg", rate: 0, gstRate: 0 });
       renderItemInputs();
       renderInvoice();
+      triggerAutoSave();
     }
 
     function removeItem(index) {
@@ -1378,12 +1604,14 @@
         items.splice(index, 1);
         renderItemInputs();
         renderInvoice();
+        triggerAutoSave();
       }
     }
 
     function updateItem(index, key, val) {
       items[index][key] = val;
       renderInvoice();
+      triggerAutoSave();
     }
 
     // STAMP CONTROLS & HANDLERS
@@ -1392,6 +1620,7 @@
       if (stampWrapper) {
         stampWrapper.style.display = show ? 'flex' : 'none';
       }
+      triggerAutoSave();
     }
 
     function changeStampColor(color) {
@@ -1399,6 +1628,7 @@
       if (svg) {
         svg.style.color = color;
       }
+      triggerAutoSave();
     }
 
     function updateStampSize(val) {
@@ -1409,6 +1639,7 @@
         container.style.height = `${val}px`;
       }
       if (label) label.textContent = `${val}px`;
+      triggerAutoSave();
     }
 
     function updateStampAngle(val) {
@@ -1418,6 +1649,7 @@
         container.style.transform = `rotate(${val}deg)`;
       }
       if (label) label.textContent = `${val}°`;
+      triggerAutoSave();
     }
 
     function handleStampUpload(input) {
@@ -1546,6 +1778,9 @@
       // Amount in pure text words without any number or prefix
       const words = numberToWords(roundedTotal);
       document.getElementById('outAmountWords').textContent = words;
+
+      // Trigger automatic save
+      triggerAutoSave();
     }
 
     // Direct standalone HTML5 Canvas generator: 100% immune to html2canvas SVG viewBox zooming or corner cropping
