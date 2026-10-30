@@ -1506,36 +1506,26 @@
       let totalTaxAmount = 0;
       [0, 5, 12, 18, 28].forEach(rate => {
         const taxable = taxableBuckets[rate] || 0;
-        if (taxable > 0 || rate === 0) {
-          const row = document.createElement('div');
-          row.className = 'inv-summary-row py-1 px-1.5 b-b text-[10.5px] items-center';
-          row.innerHTML = `
-            <div class="text-left font-semibold">Taxable @${rate}%</div>
-            <div class="text-right pr-2 font-mono">${inrFormat(taxable)}</div>
+        if (taxable > 0 && rate > 0) {
+          const halfRate = rate / 2;
+          const splitTax = taxable * (halfRate / 100);
+          totalTaxAmount += (splitTax * 2);
+
+          const cgstRow = document.createElement('div');
+          cgstRow.className = 'inv-summary-row py-1 px-1.5 b-b text-[10.5px] items-center';
+          cgstRow.innerHTML = `
+            <div class="text-left font-semibold">CGST @${halfRate}%</div>
+            <div class="text-right pr-2 font-mono">${inrFormat(splitTax, 2)}</div>
           `;
-          taxContainer.appendChild(row);
+          taxContainer.appendChild(cgstRow);
 
-          if (rate > 0) {
-            const halfRate = rate / 2;
-            const splitTax = taxable * (halfRate / 100);
-            totalTaxAmount += (splitTax * 2);
-
-            const cgstRow = document.createElement('div');
-            cgstRow.className = 'inv-summary-row py-1 px-1.5 b-b text-[10.5px] items-center';
-            cgstRow.innerHTML = `
-              <div class="text-left">CGST @${halfRate}%</div>
-              <div class="text-right pr-2 font-mono">${inrFormat(splitTax, 2)}</div>
-            `;
-            taxContainer.appendChild(cgstRow);
-
-            const sgstRow = document.createElement('div');
-            sgstRow.className = 'inv-summary-row py-1 px-1.5 b-b text-[10.5px] items-center';
-            sgstRow.innerHTML = `
-              <div class="text-left">SGST @${halfRate}%</div>
-              <div class="text-right pr-2 font-mono">${inrFormat(splitTax, 2)}</div>
-            `;
-            taxContainer.appendChild(sgstRow);
-          }
+          const sgstRow = document.createElement('div');
+          sgstRow.className = 'inv-summary-row py-1 px-1.5 b-b text-[10.5px] items-center';
+          sgstRow.innerHTML = `
+            <div class="text-left font-semibold">SGST @${halfRate}%</div>
+            <div class="text-right pr-2 font-mono">${inrFormat(splitTax, 2)}</div>
+          `;
+          taxContainer.appendChild(sgstRow);
         }
       });
 
