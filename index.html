@@ -1,0 +1,1770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GST Invoice Generator & Live Preview</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- html2pdf.js for direct client-side PDF downloads -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Fixed A4 Page Dimension for Perfect Export & Centering without trimming */
+    .invoice-sheet {
+      width: 100%;
+      max-width: 760px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      box-sizing: border-box;
+    }
+
+    /* Strict alignment table layout helpers */
+    .inv-grid-row {
+      display: grid;
+      grid-template-columns: 3.2fr 1.1fr 0.8fr 0.8fr 1.1fr 1.4fr;
+      align-items: stretch !important;
+    }
+    .inv-summary-row {
+      display: grid;
+      grid-template-columns: 7fr 1.4fr;
+      align-items: stretch !important;
+    }
+
+    /* Ensure vertical border cells stretch edge-to-edge for an unbroken, single straight line */
+    .inv-grid-row > div {
+      display: flex;
+      align-items: center;
+      min-height: 28px;
+      box-sizing: border-box;
+    }
+
+    /* ============================================================
+       THEME 1: EXACT CLASSIC ENTERPRISE (Original Black & White)
+       ============================================================ */
+    .theme-classic {
+      border: 2px solid #000;
+      background-color: #fff;
+      color: #000;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    .theme-classic .b-t { border-top: 1.5px solid #000; }
+    .theme-classic .b-b { border-bottom: 1.5px solid #000; }
+    .theme-classic .b-l { border-left: 1.5px solid #000; }
+    .theme-classic .b-r { border-right: 1.5px solid #000; }
+    .theme-classic .header-title {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+    .theme-classic .table-header {
+      background-color: #ffffff;
+      color: #000000;
+      font-weight: 700;
+    }
+
+    /* ============================================================
+       THEME 2: REFINED DOTTED BORDER (Minimal, Crisp Dotted B&W)
+       ============================================================ */
+    .theme-dotted {
+      border: 2px dotted #000000;
+      background-color: #ffffff;
+      color: #000000;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    .theme-dotted .b-t { border-top: 1.5px dotted #000000; }
+    .theme-dotted .b-b { border-bottom: 1.5px dotted #000000; }
+    .theme-dotted .b-l { border-left: 1.5px dotted #000000; }
+    .theme-dotted .b-r { border-right: 1.5px dotted #000000; }
+    .theme-dotted .header-title {
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: 1px;
+    }
+    .theme-dotted .table-header {
+      background-color: #ffffff;
+      color: #000000;
+      font-weight: 700;
+      border-top: 2px dotted #000000;
+      border-bottom: 2px dotted #000000;
+    }
+
+    /* ============================================================
+       THEME 3: DOUBLE RULED VINTAGE LEDGER (Classic Dual Border B&W)
+       ============================================================ */
+    .theme-double {
+      border: 3.5px double #000000;
+      background-color: #ffffff;
+      color: #000000;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    .theme-double .b-t { border-top: 1px solid #000000; }
+    .theme-double .b-b { border-bottom: 1px solid #000000; }
+    .theme-double .b-l { border-left: 1px solid #000000; }
+    .theme-double .b-r { border-right: 1px solid #000000; }
+    .theme-double .header-title {
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      text-decoration: underline;
+      text-underline-offset: 4px;
+    }
+    .theme-double .table-header {
+      background-color: #ffffff;
+      color: #000000;
+      font-weight: 700;
+      border-top: 3.5px double #000000;
+      border-bottom: 3.5px double #000000;
+    }
+
+    /* ============================================================
+       THEME 4: MODERN MINIMAL CLEAN (Sleek Hairline Monospaced)
+       ============================================================ */
+    .theme-minimal {
+      border: 1px solid #000000;
+      background-color: #ffffff;
+      color: #000000;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .theme-minimal .b-t { border-top: 1px solid #000000; }
+    .theme-minimal .b-b { border-bottom: 1px solid #000000; }
+    .theme-minimal .b-l { border-left: 1px solid #000000; }
+    .theme-minimal .b-r { border-right: 1px solid #000000; }
+    .theme-minimal .header-title {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+    .theme-minimal .table-header {
+      background-color: #ffffff;
+      color: #000000;
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 10px;
+      letter-spacing: 0.5px;
+    }
+
+    /* ============================================================
+       THEME 5: COMPACT DASHED HYBRID (Clean Dashed Divider Lines)
+       ============================================================ */
+    .theme-dashed {
+      border: 1.5px solid #000000;
+      background-color: #ffffff;
+      color: #000000;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    .theme-dashed .b-t { border-top: 1.5px solid #000000; }
+    .theme-dashed .b-b { border-bottom: 1.5px solid #000000; }
+    .theme-dashed .b-l { border-left: 1.5px solid #000000; }
+    .theme-dashed .b-r { border-right: 1.5px solid #000000; }
+    .theme-dashed .header-title {
+      font-size: 23px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+    .theme-dashed .table-header {
+      background-color: #ffffff;
+      color: #000000;
+      font-weight: 700;
+    }
+
+    /* ============================================================
+       THEME 6: DASHED ACCOUNTING LEDGER (B&W Dashed Horizontal Rules)
+       ============================================================ */
+    .theme-dashed-ledger {
+      border: 2px solid #000000;
+      background-color: #ffffff;
+      color: #000000;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    .theme-dashed-ledger .b-t { border-top: 1.5px dashed #000000; }
+    .theme-dashed-ledger .b-b { border-bottom: 1.5px dashed #000000; }
+    .theme-dashed-ledger .b-l { border-left: 1.5px solid #000000; }
+    .theme-dashed-ledger .b-r { border-right: 1.5px solid #000000; }
+    .theme-dashed-ledger .header-title {
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .theme-dashed-ledger .table-header {
+      background-color: #ffffff;
+      color: #000000;
+      font-weight: 800;
+      border-top: 2px solid #000000;
+      border-bottom: 2px solid #000000;
+    }
+    .theme-dashed-ledger .inv-grid-row {
+      border-bottom: 1.5px dashed #000000 !important;
+    }
+
+    /* ============================================================
+       THEME 7: HEAVY BOLD B&W FRAME (Traditional Wholesale / Mandi)
+       ============================================================ */
+    .theme-bold-frame {
+      border: 3.5px solid #000000;
+      background-color: #ffffff;
+      color: #000000;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    .theme-bold-frame .b-t { border-top: 2px solid #000000; }
+    .theme-bold-frame .b-b { border-bottom: 2px solid #000000; }
+    .theme-bold-frame .b-l { border-left: 2px solid #000000; }
+    .theme-bold-frame .b-r { border-right: 2px solid #000000; }
+    .theme-bold-frame .header-title {
+      font-size: 26px;
+      font-weight: 900;
+      letter-spacing: 0.8px;
+      text-decoration: underline;
+      text-underline-offset: 4px;
+      text-decoration-thickness: 2px;
+    }
+    .theme-bold-frame .table-header {
+      background-color: #000000;
+      color: #ffffff;
+      font-weight: 800;
+      border-top: 2.5px solid #000000;
+      border-bottom: 2.5px solid #000000;
+    }
+    .theme-bold-frame .table-header .b-r {
+      border-right: 1.5px solid #ffffff !important;
+    }
+    .theme-bold-frame .inv-grid-row {
+      border-bottom: 1.5px solid #000000 !important;
+    }
+
+    /* ============================================================
+       THEME 8: VINTAGE TYPEWRITER / DOT-MATRIX (Monochrome Classic)
+       ============================================================ */
+    .theme-vintage-mono {
+      border: 1.5px solid #000000;
+      background-color: #ffffff;
+      color: #000000;
+      font-family: 'Courier New', Courier, monospace;
+    }
+    .theme-vintage-mono .b-t { border-top: 1px dashed #000000; }
+    .theme-vintage-mono .b-b { border-bottom: 1px dashed #000000; }
+    .theme-vintage-mono .b-l { border-left: 1.5px solid #000000; }
+    .theme-vintage-mono .b-r { border-right: 1.5px solid #000000; }
+    .theme-vintage-mono .header-title {
+      font-size: 21px;
+      font-weight: 900;
+      letter-spacing: 2px;
+    }
+    .theme-vintage-mono .table-header {
+      background-color: #ffffff;
+      color: #000000;
+      font-weight: 900;
+      border-top: 2px solid #000000;
+      border-bottom: 2px solid #000000;
+      font-size: 11px;
+    }
+    .theme-vintage-mono .inv-grid-row {
+      border-bottom: 1px dashed #000000 !important;
+    }
+
+    /* Strict solid vertical divider enforcement across all columns (Description, HSN, Qty, Unit, Rate, Tax) */
+    .inv-grid-row > div.b-r {
+      border-right: 1.5px solid #000000 !important;
+      border-style: solid !important;
+      height: 100% !important;
+    }
+    .inv-grid-row {
+      border-bottom: 1.5px solid #000000 !important;
+    }
+
+    /* Custom print layout */
+    @media print {
+      body {
+        background: transparent !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+      #print-area {
+        position: static !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: flex-start !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 auto !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+      }
+      .invoice-sheet {
+        box-shadow: none !important;
+        margin: 0 auto !important;
+        width: 100% !important;
+        max-width: 720px !important;
+        page-break-inside: avoid;
+      }
+      @page {
+        size: A4 portrait;
+        margin: 8mm;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800 flex flex-col">
+
+  <!-- Top Action Toolbar -->
+  <header class="no-print bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+    <div class="max-w-[1600px] mx-auto px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+          ₹
+        </div>
+        <div>
+          <h1 class="text-sm font-bold text-slate-900 leading-none">GST Bill Generator & Live Preview</h1>
+          <p class="text-[11px] text-slate-500 mt-0.5">Real-time calculations with item-level GST breakdown & amount in words</p>
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="flex items-center gap-2 flex-wrap">
+        <!-- Template Style Selector -->
+        <div class="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1">
+          <span class="text-xs font-semibold text-slate-600 hidden sm:inline">Format:</span>
+          <select id="themeSelector" onchange="changeTemplate(this.value)" class="text-xs font-semibold bg-transparent border-0 outline-none cursor-pointer text-slate-900 py-0.5">
+            <option value="theme-classic">1. Classic Solid Border (Original B&W)</option>
+            <option value="theme-dashed-ledger">2. Dashed Ledger (B&W Dashed Rows)</option>
+            <option value="theme-bold-frame">3. Heavy Bold B&W Frame (Wholesale Mandi)</option>
+            <option value="theme-vintage-mono">4. Vintage Typewriter / Dot-Matrix B&W</option>
+            <option value="theme-dotted">5. Minimal Dotted Border</option>
+            <option value="theme-double">6. Double-Ruled Ledger</option>
+            <option value="theme-minimal">7. Modern Minimalist (Thin Lines)</option>
+            <option value="theme-dashed">8. Solid Border Clean Format</option>
+          </select>
+        </div>
+
+        <button onclick="resetToSample()" class="px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition">
+          Reset Sample
+        </button>
+
+        <button onclick="openHistoryModal()" class="px-3 py-1.5 text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg border border-indigo-200 transition flex items-center gap-1.5">
+          Bill History <span id="historyCountBadge" class="bg-indigo-600 text-white rounded-full px-1.5 py-0.2 text-[10px]">0</span>
+        </button>
+
+        <button onclick="saveCurrentBill()" class="px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-sm transition">
+          Save Bill
+        </button>
+
+        <button onclick="triggerNativePrintPDF()" class="px-3.5 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-black text-white rounded-lg shadow-sm transition flex items-center gap-1.5" title="Opens Print window where you can choose 'Save as PDF'">
+          <span>🖨️</span> Print / Save as PDF
+        </button>
+
+        <button id="btn-download" onclick="downloadPDF()" class="px-3.5 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-sm transition flex items-center gap-1.5">
+          <span>📥</span> Download PDF
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Mobile View Toggle Switcher -->
+  <div class="no-print lg:hidden flex bg-slate-200 p-1 border-b border-slate-300">
+    <button id="tabBtnForm" onclick="setMobileTab('form')" class="flex-1 py-1.5 text-center text-xs font-bold bg-white text-indigo-600 rounded shadow">
+      1. Bill Input Form
+    </button>
+    <button id="tabBtnPreview" onclick="setMobileTab('preview')" class="flex-1 py-1.5 text-center text-xs font-bold text-slate-600 rounded">
+      2. Live Preview
+    </button>
+  </div>
+
+  <!-- Main Split Layout -->
+  <main class="flex-1 max-w-[1600px] w-full mx-auto p-3 sm:p-5 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+    
+    <!-- LEFT COLUMN: FORM CONTROLS -->
+    <div id="formSection" class="lg:col-span-5 space-y-4 max-h-[calc(100vh-100px)] overflow-y-auto pr-1">
+      
+      <!-- Supplier / Business details -->
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-3">
+        <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+          <span class="text-xs font-bold text-slate-900">Seller / Company Details</span>
+          <span class="text-[10px] text-slate-400 font-medium">Header Information</span>
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">Business Name</label>
+          <input type="text" id="inpBizName" oninput="renderInvoice()" class="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded font-semibold uppercase focus:ring-1 focus:ring-indigo-500">
+        </div>
+        <div class="grid grid-cols-1 gap-2">
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">Address Line 1</label>
+            <input type="text" id="inpBizAddr1" oninput="renderInvoice()" class="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded uppercase">
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">District, State & PIN</label>
+            <input type="text" id="inpBizAddr2" oninput="renderInvoice()" class="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded uppercase">
+          </div>
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">GSTIN Number</label>
+          <input type="text" id="inpBizGstin" oninput="renderInvoice()" class="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded font-mono uppercase">
+        </div>
+      </div>
+
+      <!-- Buyer & Supply Location -->
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-3">
+        <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+          <span class="text-xs font-bold text-slate-900">Buyer & Supply Details</span>
+          <span class="text-[10px] text-slate-400 font-medium">Invoice Meta</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">Invoice No.</label>
+            <input type="text" id="inpInvNo" oninput="renderInvoice()" class="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded font-bold">
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">Invoice Date</label>
+            <input type="text" id="inpInvDate" oninput="renderInvoice()" class="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">Bill To (Customer Name)</label>
+          <input type="text" id="inpBuyerName" oninput="renderInvoice()" class="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded uppercase">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">Bill To Address 1</label>
+            <input type="text" id="inpBuyerAddr1" oninput="renderInvoice()" class="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded uppercase">
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">Bill To Address 2</label>
+            <input type="text" id="inpBuyerAddr2" oninput="renderInvoice()" class="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded uppercase">
+          </div>
+        </div>
+
+        <div class="pt-2 border-t border-slate-100">
+          <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">Place of Supply Header</label>
+          <input type="text" id="inpPosName" oninput="renderInvoice()" class="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded uppercase">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">Place of Supply Line 1</label>
+            <input type="text" id="inpPosAddr1" oninput="renderInvoice()" class="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded uppercase">
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">Place of Supply Line 2</label>
+            <input type="text" id="inpPosAddr2" oninput="renderInvoice()" class="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded uppercase">
+          </div>
+        </div>
+      </div>
+
+      <!-- Item Management Card -->
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-3">
+        <div class="flex items-center justify-between pb-2 border-b border-slate-100 flex-wrap gap-2">
+          <span class="text-xs font-bold text-slate-900">Goods & Services Items</span>
+          <div class="flex items-center gap-1.5">
+            <button onclick="openLibraryModal()" class="px-2 py-1 text-[11px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded transition">
+              Reusable Catalog (<span id="libraryCountBadge">0</span>)
+            </button>
+            <button onclick="addItem()" class="px-2 py-1 text-[11px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded transition">
+              + Add Item
+            </button>
+          </div>
+        </div>
+
+        <div id="itemInputsContainer" class="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
+          <!-- Item Form Rows rendered dynamically -->
+        </div>
+
+        <div class="flex gap-2">
+          <button onclick="addItem()" class="flex-1 py-2 border border-solid border-indigo-300 rounded-lg text-indigo-600 hover:bg-indigo-50/50 text-xs font-semibold transition">
+            + Add Blank Row
+          </button>
+          <button onclick="openLibraryModal()" class="py-2 px-3 border border-solid border-amber-300 rounded-lg text-amber-700 hover:bg-amber-50/50 text-xs font-semibold transition">
+            Add from Catalog
+          </button>
+        </div>
+      </div>
+
+      <!-- Bank & Payment Details Form Inputs -->
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-3">
+        <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+          <span class="text-xs font-bold text-slate-900">Bank & Payment Details</span>
+          <span class="text-[10px] text-slate-400 font-medium">Footer Info</span>
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">Account Holder Name</label>
+          <input type="text" id="inpAccHolder" oninput="renderInvoice()" class="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded uppercase font-semibold">
+        </div>
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">Cheque / Payment Note</label>
+          <input type="text" id="inpChequeNote" oninput="renderInvoice()" class="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded">
+        </div>
+        <div class="grid grid-cols-1 gap-2">
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">Bank Name</label>
+            <input type="text" id="inpBankName" oninput="renderInvoice()" class="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">Account Number</label>
+            <input type="text" id="inpBankAcc" oninput="renderInvoice()" class="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded font-mono">
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-600 mb-0.5">IFS Code</label>
+            <input type="text" id="inpBankIfsc" oninput="renderInvoice()" class="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded font-mono uppercase">
+          </div>
+        </div>
+      </div>
+
+      <!-- Stamp & Signature Control -->
+      <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-3">
+        <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+          <span class="text-xs font-bold text-slate-900">Stamp & Signature</span>
+          <span class="text-[10px] text-slate-400 font-medium">Authorisation</span>
+        </div>
+        <div class="flex items-center justify-between text-xs">
+          <label class="flex items-center gap-2 cursor-pointer font-semibold text-slate-700">
+            <input type="checkbox" id="chkShowStamp" checked onchange="toggleStampVisibility(this.checked)" class="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4">
+            Show Official Rubber Stamp
+          </label>
+          <select id="stampColorSelect" onchange="changeStampColor(this.value)" class="text-xs px-2 py-1 border border-slate-300 rounded font-medium">
+            <option value="#2563eb">Blue Ink (Sample)</option>
+            <option value="#1d4ed8">Deep Royal Ink</option>
+            <option value="#1e3a8a">Dark Navy Ink</option>
+            <option value="#000000">Pure Black Ink</option>
+            <option value="#b91c1c">Red Verification Ink</option>
+          </select>
+        </div>
+        <div class="grid grid-cols-2 gap-2 pt-1 text-[11px]">
+          <div>
+            <label class="block text-slate-600 font-semibold mb-0.5">Stamp Size (<span id="stampSizeVal">120px</span>)</label>
+            <input type="range" id="stampSizeRange" min="80" max="170" value="120" oninput="updateStampSize(this.value)" class="w-full h-1 bg-slate-200 rounded cursor-pointer">
+          </div>
+          <div>
+            <label class="block text-slate-600 font-semibold mb-0.5">Stamp Angle (<span id="stampAngleVal">0°</span>)</label>
+            <input type="range" id="stampAngleRange" min="-30" max="30" value="0" oninput="updateStampAngle(this.value)" class="w-full h-1 bg-slate-200 rounded cursor-pointer">
+          </div>
+        </div>
+        <div class="pt-1">
+          <label class="block text-[11px] font-semibold text-slate-600 mb-1">Custom Stamp Upload (Optional)</label>
+          <input type="file" id="stampUploadInput" accept="image/*" onchange="handleStampUpload(this)" class="w-full text-xs text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer">
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT COLUMN: LIVE BILL PREVIEW -->
+    <div id="previewSection" class="lg:col-span-7 flex flex-col items-center">
+      
+      <!-- Preview Header Badge -->
+      <div class="w-full max-w-[760px] flex items-center justify-between pb-2 px-1 text-xs no-print">
+        <span class="font-bold text-slate-600 flex items-center gap-1.5">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          Live A4 Sheet Output (Calculated in real-time)
+        </span>
+        <span class="text-slate-400 text-[11px]">Centered & scaled to A4</span>
+      </div>
+
+      <!-- INVOICE SHEET TO PRINT / EXPORT -->
+      <div id="print-area" class="w-full max-w-[800px] flex justify-center bg-transparent no-print-shadow">
+        
+        <div id="invoiceSheet" class="invoice-sheet theme-classic text-[11.5px] leading-tight select-none sm:select-text shadow-xl">
+          
+          <!-- SELLER HEADER -->
+          <div class="header-bg text-center py-2.5 px-3">
+            <h2 id="outBizName" class="header-title uppercase font-bold text-black mb-0.5">SAI ENTERPRISES</h2>
+            <div id="outBizAddr1" class="font-semibold text-black uppercase text-[11px]">AT-MANJHARIA ,P.O- SAPAHI,TURKAULIA</div>
+            <div id="outBizAddr2" class="font-semibold text-black uppercase text-[11px]">DST-EAST CHAMPARAN,BIHAR 845401</div>
+            <div class="font-semibold text-black uppercase text-[11px] mt-0.5">
+              GSTIN NO <span id="outBizGstin" class="font-mono">10EFSPS6548G1ZZ</span>
+            </div>
+          </div>
+
+          <!-- BUYER & DISPATCH GRID -->
+          <div class="b-t grid grid-cols-12 items-stretch">
+            <!-- Col 1: Bill to -->
+            <div class="col-span-4 p-2.5 b-r flex flex-col justify-between">
+              <div>
+                <span class="font-bold">BILL TO - </span><span id="outBuyerName" class="font-bold uppercase">UMS BALAHI</span>
+              </div>
+              <div class="mt-2 text-[10.5px] uppercase space-y-1">
+                <div id="outBuyerAddr1">AT -BALAHI,TURKAULIA</div>
+                <div id="outBuyerAddr2">EAST CHAMPARAN,845437</div>
+              </div>
+            </div>
+
+            <!-- Col 2: Place of Supply -->
+            <div class="col-span-4 p-2.5 b-r flex flex-col justify-between">
+              <div>
+                <div class="font-bold uppercase">PLACE OF SUPPLY-<span id="outPosName">UMS BALAHI</span></div>
+              </div>
+              <div class="mt-2 text-[10.5px] uppercase space-y-1">
+                <div id="outPosAddr1">AT -BALAHI,TURKAULIA</div>
+                <div id="outPosAddr2">EAST CHAMPARAN,845437</div>
+              </div>
+            </div>
+
+            <!-- Col 3: Invoice No & Date -->
+            <div class="col-span-4 flex flex-col justify-between">
+              <div class="grid grid-cols-2 b-b text-center font-bold text-[10.5px] py-1 bg-slate-50/50">
+                <div class="b-r">INVOICE NO</div>
+                <div>DATE</div>
+              </div>
+              <div class="grid grid-cols-2 text-center text-[10.5px] py-2">
+                <div id="outInvNo" class="b-r font-mono font-semibold">1235</div>
+                <div id="outInvDate" class="font-semibold">30 April 2026</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TABLE HEADER (Aligned with exact column proportions) -->
+          <div class="b-t b-b inv-grid-row text-[10.5px] font-bold table-header">
+            <div class="p-1.5 text-left b-r">DESCRIPTION OF GOODS</div>
+            <div class="p-1.5 text-center b-r">HSN CODE</div>
+            <div class="p-1.5 text-right b-r pr-1.5">QTY</div>
+            <div class="p-1.5 text-center b-r">UNITS</div>
+            <div class="p-1.5 text-right b-r pr-1.5">RATE</div>
+            <div class="p-1.5 text-right pr-2">AMOUNT</div>
+          </div>
+
+          <!-- DYNAMIC GOODS TABLE BODY -->
+          <div id="outItemsList" class="text-[11px]">
+            <!-- Items rendered via JavaScript -->
+          </div>
+
+          <!-- GROSS TOTAL -->
+          <div class="b-t inv-summary-row text-[11px] font-bold bg-slate-50/20">
+            <div class="p-1.5 b-r text-left">Gross Total</div>
+            <div id="outGrossTotal" class="p-1.5 text-right pr-2 font-mono">24225</div>
+          </div>
+
+          <!-- TAX SLABS AND GST ROWS CONTAINER -->
+          <div id="outTaxSection" class="b-t text-[10.5px]">
+            <!-- Dynamically populated Taxable @0%, @5%, CGST/SGST, Round off -->
+          </div>
+
+          <!-- FINAL PAYABLE ROW -->
+          <div class="b-t b-b inv-summary-row text-[11.5px] font-bold bg-slate-100/50">
+            <div class="p-1.5 b-r text-left">Total Amount</div>
+            <div id="outNetTotal" class="p-1.5 text-right pr-2 font-mono text-sm">24589</div>
+          </div>
+
+          <!-- AMOUNT IN WORDS BANNER (ONLY TEXT, LEFT ALIGNED WITH PADDING) -->
+          <div class="b-b px-2.5 py-1.5 text-[10.5px] bg-slate-50/30">
+            <span id="outAmountWords" class="italic font-bold">Twenty-Four Thousand Five Hundred Eighty-Nine Rupees Only</span>
+          </div>
+
+          <!-- FOOTER: BANK & SIGNATURE (Perfect 50/50 split and vertical alignment) -->
+          <div class="grid grid-cols-2 items-stretch min-h-[155px]">
+            <div class="p-2.5 b-r text-[10px] flex flex-col justify-between leading-relaxed">
+              <div>
+                <div class="font-bold">Total amount Chargable</div>
+                <div id="outChequeNote" class="mt-0.5">Note -Please issue cheques in favour of "Sai Enterprises"</div>
+                <div class="mt-1">A/C Name: <span id="outAccHolder" class="font-bold uppercase">SAI ENTERPRISES</span></div>
+                <div>Bank: <span id="outBankName" class="font-semibold">State Bank of India</span></div>
+                <div>A/C No: <span id="outBankAcc" class="font-mono font-semibold">41864420405</span></div>
+                <div>IFS Code: <span id="outBankIfsc" class="font-mono font-semibold">SBIN0018357</span></div>
+              </div>
+            </div>
+            
+            <div class="p-2.5 flex flex-col justify-between items-center text-center relative overflow-visible">
+              <div class="h-1"></div>
+
+              <!-- Official Rubber Stamp Graphic - Perfectly Centered & Overflow Safe -->
+              <div id="stampWrapper" class="my-auto flex items-center justify-center pointer-events-none select-none relative overflow-visible w-full py-1">
+                <div id="stampContainer" class="w-[125px] h-[125px] transform rotate-0 opacity-100 transition-all drop-shadow-sm flex items-center justify-center overflow-visible p-0 relative">
+                  <!-- Pixel-accurate Solid Vector Replica of INDU KIRANA AND GENRAL STORE Stamp with Safety Margins -->
+                  <svg id="svgStamp" viewBox="0 0 440 440" class="w-full h-full block overflow-visible" style="color: #0b5ed7;">
+                    <defs>
+                      <!-- Text path centered cleanly in the channel between the outer and inner rings -->
+                      <path id="fullCircleTextPath" 
+                            d="M 114,332 A 158,158 0 1,1 326,332" 
+                            fill="none" />
+                      <!-- Outlined 5-pointed Star with solid proportions -->
+                      <g id="preciseStar">
+                        <polygon points="0,-13 3.8,-4 13.5,-4 5.8,1.8 8.8,11.2 0,5.6 -8.8,11.2 -5.8,1.8 -13.5,-4 -3.8,-4"
+                                 fill="none" stroke="currentColor" stroke-width="3.2" stroke-linejoin="round" />
+                      </g>
+                    </defs>
+
+                    <!-- Outer Thick Solid Boundary Rim (Centered at 220,220 with 30px boundary buffer) -->
+                    <circle cx="220" cy="220" r="190" fill="none" stroke="currentColor" stroke-width="8.5" />
+
+                    <!-- Inner Solid Circle Ring -->
+                    <circle cx="220" cy="220" r="126" fill="none" stroke="currentColor" stroke-width="3.8" />
+
+                    <!-- Circular Perimeter Text: INDU KIRANA AND GENRAL STORE (Solid, bold, balanced) -->
+                    <text fill="currentColor" font-size="25.5" font-family="'Arial', 'Helvetica', sans-serif" font-weight="800" letter-spacing="4.8">
+                      <textPath href="#fullCircleTextPath" startOffset="50%" text-anchor="middle" dominant-baseline="central">
+                        INDU KIRANA AND GENRAL STORE
+                      </textPath>
+                    </text>
+
+                    <!-- 12 Outlined Stars Positioned Outward with Zero Overlap -->
+                    <g transform="translate(220,220)">
+                      <g transform="rotate(0) translate(0,-106)"><use href="#preciseStar" /></g>
+                      <g transform="rotate(30) translate(0,-106)"><use href="#preciseStar" /></g>
+                      <g transform="rotate(60) translate(0,-106)"><use href="#preciseStar" /></g>
+                      <g transform="rotate(90) translate(0,-106)"><use href="#preciseStar" /></g>
+                      <g transform="rotate(120) translate(0,-106)"><use href="#preciseStar" /></g>
+                      <g transform="rotate(150) translate(0,-106)"><use href="#preciseStar" /></g>
+                      <g transform="rotate(180) translate(0,-106)"><use href="#preciseStar" /></g>
+                      <g transform="rotate(210) translate(0,-106)"><use href="#preciseStar" /></g>
+                      <g transform="rotate(240) translate(0,-106)"><use href="#preciseStar" /></g>
+                      <g transform="rotate(270) translate(0,-106)"><use href="#preciseStar" /></g>
+                      <g transform="rotate(300) translate(0,-106)"><use href="#preciseStar" /></g>
+                      <g transform="rotate(330) translate(0,-106)"><use href="#preciseStar" /></g>
+                    </g>
+
+                    <!-- Center Bold Wordmark: VERIFIED -->
+                    <text x="220" y="220" text-anchor="middle" dominant-baseline="central" fill="currentColor" font-size="36" font-family="'Arial Black', 'Impact', sans-serif" font-weight="900" letter-spacing="2">
+                      VERIFIED
+                    </text>
+                  </svg>
+                  <img id="customStampImg" class="w-full h-full object-contain hidden" alt="Stamp" />
+                </div>
+              </div>
+
+              <!-- Authorised Signatury Label Centered -->
+              <div class="w-full text-center pb-1 z-10">
+                <div class="text-[11.5px] font-semibold">Authorised Signatury</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+  <!-- BILL HISTORY MODAL -->
+  <div id="historyModal" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden">
+      <div class="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+        <div>
+          <h3 class="text-sm font-bold text-slate-900">Saved Bill History</h3>
+          <p class="text-[11px] text-slate-500">Restore or manage previously saved invoices</p>
+        </div>
+        <button onclick="closeHistoryModal()" class="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 text-sm font-bold">
+          ✕
+        </button>
+      </div>
+
+      <div class="p-4 border-b border-slate-100 flex items-center justify-between gap-3">
+        <input type="text" id="historySearchInput" oninput="renderHistoryList()" placeholder="Search by Invoice No, Customer, or Date..." class="flex-1 text-xs px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500">
+        <button onclick="exportHistoryData()" class="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg">
+          Export Backup
+        </button>
+      </div>
+
+      <div id="historyListContainer" class="p-4 flex-1 overflow-y-auto space-y-2">
+        <!-- Rendered via JS -->
+      </div>
+
+      <div class="p-3 bg-slate-50 border-t border-slate-200 text-right">
+        <button onclick="closeHistoryModal()" class="px-4 py-1.5 text-xs font-semibold bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SAVED ITEM LIBRARY / CATALOG MODAL -->
+  <div id="libraryModal" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+      <div class="p-4 border-b border-slate-200 flex items-center justify-between bg-amber-50/50">
+        <div>
+          <h3 class="text-sm font-bold text-slate-900">Reusable Product & Item Catalog</h3>
+          <p class="text-[11px] text-slate-500">Save products once and add them to any invoice in 1-click</p>
+        </div>
+        <button onclick="closeLibraryModal()" class="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 text-sm font-bold">
+          ✕
+        </button>
+      </div>
+
+      <!-- Add New Catalog Item Box -->
+      <div class="p-4 bg-slate-50 border-b border-slate-200">
+        <div class="text-xs font-bold text-slate-700 mb-2">
+          + Add New Product to Catalog
+        </div>
+        <div class="grid grid-cols-12 gap-2 text-xs">
+          <div class="col-span-4">
+            <input type="text" id="catDesc" placeholder="Item description (e.g. Refined Oil)" class="w-full px-2 py-1.5 border border-slate-300 rounded">
+          </div>
+          <div class="col-span-2">
+            <input type="text" id="catHsn" placeholder="HSN code" class="w-full px-2 py-1.5 border border-slate-300 rounded font-mono">
+          </div>
+          <div class="col-span-2">
+            <input type="text" id="catUnit" placeholder="Unit (kg/pc)" value="kg" class="w-full px-2 py-1.5 border border-slate-300 rounded text-center">
+          </div>
+          <div class="col-span-2">
+            <input type="number" id="catRate" placeholder="Rate (₹)" class="w-full px-2 py-1.5 border border-slate-300 rounded text-right font-mono">
+          </div>
+          <div class="col-span-2">
+            <select id="catGst" class="w-full px-1.5 py-1.5 border border-slate-300 rounded">
+              <option value="0">0% GST</option>
+              <option value="5" selected>5% GST</option>
+              <option value="12">12% GST</option>
+              <option value="18">18% GST</option>
+              <option value="28">28% GST</option>
+            </select>
+          </div>
+        </div>
+        <div class="mt-2 text-right">
+          <button onclick="saveNewCatalogItem()" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded text-xs font-semibold shadow-sm ml-auto">
+            Save to Reusable List
+          </button>
+        </div>
+      </div>
+
+      <!-- Catalog List -->
+      <div class="p-4 flex-1 overflow-y-auto">
+        <div class="text-xs font-semibold text-slate-500 mb-2 flex justify-between items-center">
+          <span>Click <strong>"+ Insert"</strong> to add an item directly into your current invoice</span>
+          <span id="catTotalCount" class="text-[11px] font-mono text-slate-400">0 items</span>
+        </div>
+        <div id="catalogListContainer" class="space-y-2">
+          <!-- Rendered via JS -->
+        </div>
+      </div>
+
+      <div class="p-3 bg-slate-50 border-t border-slate-200 text-right">
+        <button onclick="closeLibraryModal()" class="px-4 py-1.5 text-xs font-semibold bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg">
+          Done
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification Banner -->
+  <div id="toastNotification" class="fixed bottom-5 right-5 bg-slate-900 text-white px-4 py-2.5 rounded-lg shadow-xl text-xs font-semibold z-50 transform translate-y-20 opacity-0 transition-all duration-300 flex items-center gap-2">
+    <span id="toastMessage">Action completed</span>
+  </div>
+
+  <script>
+    // Convert number to Indian Currency Words
+    function numberToWords(num) {
+      if (isNaN(num) || num === null || num === undefined) return '';
+      num = Math.floor(Math.abs(num));
+      if (num === 0) return 'Zero Rupees Only';
+
+      const single = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
+      const teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+      const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+      function convertBelowThousand(n) {
+        let str = '';
+        if (n >= 100) {
+          str += single[Math.floor(n / 100)] + ' Hundred ';
+          n %= 100;
+        }
+        if (n >= 20) {
+          str += tens[Math.floor(n / 10)] + ' ';
+          n %= 10;
+        }
+        if (n >= 10) {
+          str += teens[n - 10] + ' ';
+          n = 0;
+        }
+        if (n > 0) {
+          str += single[n] + ' ';
+        }
+        return str.trim();
+      }
+
+      let crore = Math.floor(num / 10000000);
+      num %= 10000000;
+      let lakh = Math.floor(num / 100000);
+      num %= 100000;
+      let thousand = Math.floor(num / 1000);
+      num %= 1000;
+      let remainder = num;
+
+      let result = '';
+      if (crore > 0) result += convertBelowThousand(crore) + ' Crore ';
+      if (lakh > 0) result += convertBelowThousand(lakh) + ' Lakh ';
+      if (thousand > 0) result += convertBelowThousand(thousand) + ' Thousand ';
+      if (remainder > 0) result += convertBelowThousand(remainder) + ' ';
+
+      return result.trim() + ' Rupees Only';
+    }
+
+    // Format number into Indian Numbering System with commas (e.g., 23,40,900)
+    function inrFormat(num, decimals = 0) {
+      if (num === null || num === undefined || isNaN(num)) return '0';
+      const absNum = Math.abs(Number(num));
+      const isNeg = Number(num) < 0;
+      
+      let [integerPart, decimalPart] = absNum.toFixed(decimals).split('.');
+      
+      // Indian numbering format: 3 digits at the end, then groups of 2
+      let lastThree = integerPart.substring(integerPart.length - 3);
+      let otherNumbers = integerPart.substring(0, integerPart.length - 3);
+      if (otherNumbers !== '') {
+        lastThree = ',' + lastThree;
+      }
+      const formattedInt = otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ",") + lastThree;
+      
+      const res = formattedInt + (decimals > 0 && decimalPart ? '.' + decimalPart : '');
+      return (isNeg ? '-' : '') + res;
+    }
+
+    // In-Memory state for Saved Bills History and Reusable Catalog
+    let billHistory = [];
+    let savedCatalog = [
+      { id: 'c1', desc: "Egg/seasonalFruit", hsn: "", unit: "pc", rate: 5, gstRate: 0 },
+      { id: 'c2', desc: "Mixed pulses", hsn: "", unit: "kg", rate: 110, gstRate: 0 },
+      { id: 'c3', desc: "Potato/Green Vegetable", hsn: "", unit: "kg", rate: 16, gstRate: 0 },
+      { id: 'c4', desc: "Chickpeas/Gram", hsn: "", unit: "kg", rate: 90, gstRate: 0 },
+      { id: 'c5', desc: "Fule/gas", hsn: "", unit: "cly", rate: 1050, gstRate: 5 },
+      { id: 'c6', desc: "Turmeric Powder", hsn: "", unit: "kg", rate: 250, gstRate: 5 },
+      { id: 'c7', desc: "Mustard Oil/Refined", hsn: "", unit: "kg", rate: 180, gstRate: 5 },
+      { id: 'c8', desc: "Dish Soap", hsn: "", unit: "pc", rate: 10, gstRate: 5 }
+    ];
+
+    // Initial sample dataset matching your bill
+    const defaultData = {
+      bizName: "SAI ENTERPRISES",
+      bizAddr1: "AT-MANJHARIA ,P.O- SAPAHI,TURKAULIA",
+      bizAddr2: "DST-EAST CHAMPARAN,BIHAR 845401",
+      bizGstin: "10EFSPS6548G1ZZ",
+      buyerName: "UMS BALAHI",
+      buyerAddr1: "AT -BALAHI,TURKAULIA",
+      buyerAddr2: "EAST CHAMPARAN,845437",
+      posName: "UMS BALAHI",
+      posAddr1: "AT -BALAHI,TURKAULIA",
+      posAddr2: "EAST CHAMPARAN,845437",
+      invNo: "1235",
+      invDate: "30 April 2026",
+      chequeNote: 'Note -Please issue cheques in favour of "Sai Enterprises"',
+      accHolder: "SAI ENTERPRISES",
+      bankName: "State Bank of India",
+      bankAcc: "41864420405",
+      bankIfsc: "SBIN0018357",
+      items: [
+        { desc: "Egg/seasonalFruit", hsn: "", qty: 413, unit: "pc", rate: 5, gstRate: 0 },
+        { desc: "Mixed pulses", hsn: "", qty: 46, unit: "kg", rate: 110, gstRate: 0 },
+        { desc: "Potato/Green Vegetable", hsn: "", qty: 135, unit: "kg", rate: 16, gstRate: 0 },
+        { desc: "Chickpeas/Gram", hsn: "", qty: 12, unit: "kg", rate: 90, gstRate: 0 },
+        { desc: "Chili", hsn: "", qty: 2, unit: "kg", rate: 220, gstRate: 0 },
+        { desc: "Fule/gas", hsn: "", qty: 4, unit: "cly", rate: 1050, gstRate: 5 },
+        { desc: "Salt", hsn: "", qty: 10, unit: "kg", rate: 20, gstRate: 0 },
+        { desc: "Onion", hsn: "", qty: 40, unit: "kg", rate: 25, gstRate: 0 },
+        { desc: "Five-spice Mix/Cumin Standing", hsn: "", qty: 3, unit: "kg", rate: 250, gstRate: 5 },
+        { desc: "Dish Soap", hsn: "", qty: 17, unit: "pc", rate: 10, gstRate: 0 },
+        { desc: "Mixed Spices", hsn: "", qty: 9, unit: "kg", rate: 250, gstRate: 5 },
+        { desc: "Turmeric Powder", hsn: "", qty: 3, unit: "kg", rate: 250, gstRate: 5 },
+        { desc: "Mustard Oil/Refined", hsn: "", qty: 17, unit: "kg", rate: 180, gstRate: 5 },
+        { desc: "Soyabean", hsn: "", qty: 9, unit: "kg", rate: 100, gstRate: 0 },
+        { desc: "Scrub", hsn: "", qty: 14, unit: "pc", rate: 10, gstRate: 0 }
+      ]
+    };
+
+    let items = [];
+
+    window.addEventListener('DOMContentLoaded', () => {
+      resetToSample();
+      updateBadgeCounts();
+    });
+
+    // Reset all form inputs and item rows back to original sample data
+    function resetToSample() {
+      document.getElementById('inpBizName').value = defaultData.bizName;
+      document.getElementById('inpBizAddr1').value = defaultData.bizAddr1;
+      document.getElementById('inpBizAddr2').value = defaultData.bizAddr2;
+      document.getElementById('inpBizGstin').value = defaultData.bizGstin;
+
+      document.getElementById('inpBuyerName').value = defaultData.buyerName;
+      document.getElementById('inpBuyerAddr1').value = defaultData.buyerAddr1;
+      document.getElementById('inpBuyerAddr2').value = defaultData.buyerAddr2;
+
+      document.getElementById('inpPosName').value = defaultData.posName;
+      document.getElementById('inpPosAddr1').value = defaultData.posAddr1;
+      document.getElementById('inpPosAddr2').value = defaultData.posAddr2;
+
+      document.getElementById('inpInvNo').value = defaultData.invNo;
+      document.getElementById('inpInvDate').value = defaultData.invDate;
+
+      document.getElementById('inpAccHolder').value = defaultData.accHolder;
+      document.getElementById('inpChequeNote').value = defaultData.chequeNote;
+      document.getElementById('inpBankName').value = defaultData.bankName;
+      document.getElementById('inpBankAcc').value = defaultData.bankAcc;
+      document.getElementById('inpBankIfsc').value = defaultData.bankIfsc;
+
+      items = JSON.parse(JSON.stringify(defaultData.items));
+      renderItemInputs();
+      renderInvoice();
+      showToast('Loaded sample bill data');
+    }
+
+    // Switch between the various pure black & white design templates
+    function changeTemplate(themeClass) {
+      const sheet = document.getElementById('invoiceSheet');
+      sheet.className = `invoice-sheet ${themeClass} text-[11.5px] leading-tight select-none sm:select-text shadow-xl`;
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toastNotification');
+      const text = document.getElementById('toastMessage');
+      text.textContent = msg;
+      toast.classList.remove('translate-y-20', 'opacity-0');
+      setTimeout(() => {
+        toast.classList.add('translate-y-20', 'opacity-0');
+      }, 2500);
+    }
+
+    function updateBadgeCounts() {
+      const hBadge = document.getElementById('historyCountBadge');
+      const lBadge = document.getElementById('libraryCountBadge');
+      if (hBadge) hBadge.textContent = billHistory.length;
+      if (lBadge) lBadge.textContent = savedCatalog.length;
+    }
+
+    // Save current bill to history
+    function saveCurrentBill() {
+      const invNo = document.getElementById('inpInvNo').value || 'Draft';
+      const buyer = document.getElementById('inpBuyerName').value || 'Unnamed Buyer';
+      const date = document.getElementById('inpInvDate').value || new Date().toLocaleDateString();
+      const netTotal = document.getElementById('outNetTotal').textContent || '0';
+
+      const billSnapshot = {
+        id: 'bill_' + Date.now(),
+        savedAt: new Date().toLocaleString(),
+        invNo: invNo,
+        buyerName: buyer,
+        invDate: date,
+        netTotal: netTotal,
+        formData: {
+          bizName: document.getElementById('inpBizName').value,
+          bizAddr1: document.getElementById('inpBizAddr1').value,
+          bizAddr2: document.getElementById('inpBizAddr2').value,
+          bizGstin: document.getElementById('inpBizGstin').value,
+          buyerName: document.getElementById('inpBuyerName').value,
+          buyerAddr1: document.getElementById('inpBuyerAddr1').value,
+          buyerAddr2: document.getElementById('inpBuyerAddr2').value,
+          posName: document.getElementById('inpPosName').value,
+          posAddr1: document.getElementById('inpPosAddr1').value,
+          posAddr2: document.getElementById('inpPosAddr2').value,
+          invNo: document.getElementById('inpInvNo').value,
+          invDate: document.getElementById('inpInvDate').value,
+          accHolder: document.getElementById('inpAccHolder').value,
+          chequeNote: document.getElementById('inpChequeNote').value,
+          bankName: document.getElementById('inpBankName').value,
+          bankAcc: document.getElementById('inpBankAcc').value,
+          bankIfsc: document.getElementById('inpBankIfsc').value,
+          items: JSON.parse(JSON.stringify(items))
+        }
+      };
+
+      billHistory.unshift(billSnapshot);
+      updateBadgeCounts();
+      showToast(`Bill #${invNo} saved to history!`);
+    }
+
+    // Load saved bill into the generator
+    function loadSavedBill(id) {
+      const target = billHistory.find(b => b.id === id);
+      if (!target) return;
+
+      const d = target.formData;
+      document.getElementById('inpBizName').value = d.bizName || '';
+      document.getElementById('inpBizAddr1').value = d.bizAddr1 || '';
+      document.getElementById('inpBizAddr2').value = d.bizAddr2 || '';
+      document.getElementById('inpBizGstin').value = d.bizGstin || '';
+
+      document.getElementById('inpBuyerName').value = d.buyerName || '';
+      document.getElementById('inpBuyerAddr1').value = d.buyerAddr1 || '';
+      document.getElementById('inpBuyerAddr2').value = d.buyerAddr2 || '';
+
+      document.getElementById('inpPosName').value = d.posName || '';
+      document.getElementById('inpPosAddr1').value = d.posAddr1 || '';
+      document.getElementById('inpPosAddr2').value = d.posAddr2 || '';
+
+      document.getElementById('inpInvNo').value = d.invNo || '';
+      document.getElementById('inpInvDate').value = d.invDate || '';
+
+      document.getElementById('inpAccHolder').value = d.accHolder || '';
+      document.getElementById('inpChequeNote').value = d.chequeNote || '';
+      document.getElementById('inpBankName').value = d.bankName || '';
+      document.getElementById('inpBankAcc').value = d.bankAcc || '';
+      document.getElementById('inpBankIfsc').value = d.bankIfsc || '';
+
+      items = JSON.parse(JSON.stringify(d.items || []));
+      renderItemInputs();
+      renderInvoice();
+      closeHistoryModal();
+      showToast(`Loaded Bill #${d.invNo}`);
+    }
+
+    function deleteSavedBill(id, event) {
+      if (event) event.stopPropagation();
+      billHistory = billHistory.filter(b => b.id !== id);
+      updateBadgeCounts();
+      renderHistoryList();
+      showToast('Bill removed from history');
+    }
+
+    // Modals Control
+    function openHistoryModal() {
+      document.getElementById('historyModal').classList.remove('hidden');
+      renderHistoryList();
+    }
+    function closeHistoryModal() {
+      document.getElementById('historyModal').classList.add('hidden');
+    }
+
+    function renderHistoryList() {
+      const container = document.getElementById('historyListContainer');
+      const query = (document.getElementById('historySearchInput').value || '').toLowerCase();
+      container.innerHTML = '';
+
+      const filtered = billHistory.filter(b => 
+        (b.invNo && b.invNo.toLowerCase().includes(query)) ||
+        (b.buyerName && b.buyerName.toLowerCase().includes(query)) ||
+        (b.invDate && b.invDate.toLowerCase().includes(query))
+      );
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-10 text-slate-400">
+            <p class="text-xs font-semibold">No saved bills found.</p>
+            <p class="text-[11px] mt-0.5">Click "Save Bill" on the top bar to keep your bills here.</p>
+          </div>
+        `;
+        return;
+      }
+
+      filtered.forEach(bill => {
+        const card = document.createElement('div');
+        card.className = 'p-3 border border-slate-200 rounded-lg bg-slate-50 hover:bg-indigo-50/40 transition flex items-center justify-between gap-3 cursor-pointer group';
+        card.onclick = () => loadSavedBill(bill.id);
+        card.innerHTML = `
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-bold text-slate-900 font-mono">#${bill.invNo}</span>
+              <span class="text-xs font-semibold text-slate-700">${bill.buyerName}</span>
+            </div>
+            <div class="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2">
+              <span>Date: ${bill.invDate}</span>
+              <span>•</span>
+              <span>Saved on: ${bill.savedAt}</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <div class="text-right">
+              <div class="text-xs font-bold text-slate-900 font-mono">₹${bill.netTotal.includes(',') ? bill.netTotal : inrFormat(parseFloat(bill.netTotal.replace(/,/g, '')) || 0)}</div>
+              <div class="text-[10px] text-emerald-600 font-semibold">${bill.formData.items.length} items</div>
+            </div>
+            <button onclick="deleteSavedBill('${bill.id}', event)" class="p-1.5 text-slate-400 hover:text-red-600 rounded hover:bg-white text-xs font-bold" title="Delete">
+              ✕
+            </button>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    // Export history to JSON file
+    function exportHistoryData() {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({ billHistory, savedCatalog }, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `GST_Bills_Backup_${Date.now()}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      showToast('History & Catalog exported!');
+    }
+
+    // CATALOG / SAVED ITEM LIBRARY LOGIC
+    function openLibraryModal() {
+      document.getElementById('libraryModal').classList.remove('hidden');
+      renderCatalogList();
+    }
+    function closeLibraryModal() {
+      document.getElementById('libraryModal').classList.add('hidden');
+    }
+
+    function saveNewCatalogItem() {
+      const desc = document.getElementById('catDesc').value.trim();
+      const hsn = document.getElementById('catHsn').value.trim();
+      const unit = document.getElementById('catUnit').value.trim() || 'pc';
+      const rate = parseFloat(document.getElementById('catRate').value) || 0;
+      const gstRate = parseFloat(document.getElementById('catGst').value) || 0;
+
+      if (!desc) {
+        showToast('Please enter an item description');
+        return;
+      }
+
+      savedCatalog.push({
+        id: 'c_' + Date.now(),
+        desc,
+        hsn,
+        unit,
+        rate,
+        gstRate
+      });
+
+      // Reset input fields
+      document.getElementById('catDesc').value = '';
+      document.getElementById('catHsn').value = '';
+      document.getElementById('catRate').value = '';
+
+      updateBadgeCounts();
+      renderCatalogList();
+      showToast(`Added "${desc}" to catalog!`);
+    }
+
+    function insertCatalogItemToBill(id) {
+      const item = savedCatalog.find(c => c.id === id);
+      if (!item) return;
+
+      items.push({
+        desc: item.desc,
+        hsn: item.hsn,
+        qty: 1,
+        unit: item.unit,
+        rate: item.rate,
+        gstRate: item.gstRate
+      });
+
+      renderItemInputs();
+      renderInvoice();
+      showToast(`Added "${item.desc}" to invoice`);
+    }
+
+    function deleteCatalogItem(id, event) {
+      if (event) event.stopPropagation();
+      savedCatalog = savedCatalog.filter(c => c.id !== id);
+      updateBadgeCounts();
+      renderCatalogList();
+      showToast('Item removed from catalog');
+    }
+
+    function renderCatalogList() {
+      const container = document.getElementById('catalogListContainer');
+      const countEl = document.getElementById('catTotalCount');
+      if (countEl) countEl.textContent = `${savedCatalog.length} products`;
+      container.innerHTML = '';
+
+      if (savedCatalog.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-8 text-slate-400">
+            <p class="text-xs font-semibold">Your product catalog is empty.</p>
+            <p class="text-[11px] mt-0.5">Use the form above to save reusable items.</p>
+          </div>
+        `;
+        return;
+      }
+
+      savedCatalog.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between gap-3 text-xs';
+        row.innerHTML = `
+          <div class="flex-1">
+            <div class="font-bold text-slate-900">${item.desc}</div>
+            <div class="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
+              ${item.hsn ? `<span>HSN: <strong class="font-mono text-slate-700">${item.hsn}</strong></span><span>•</span>` : ''}
+              <span>Unit: <strong>${item.unit}</strong></span>
+              <span>•</span>
+              <span>Rate: <strong class="font-mono text-slate-700">₹${item.rate}</strong></span>
+              <span>•</span>
+              <span class="text-indigo-600 font-semibold">${item.gstRate}% GST</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button onclick="insertCatalogItemToBill('${item.id}')" class="px-2.5 py-1 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded flex items-center gap-1 shadow-sm">
+              + Insert
+            </button>
+            <button onclick="deleteCatalogItem('${item.id}', event)" class="p-1 text-slate-400 hover:text-red-600 rounded text-xs font-bold">
+              ✕
+            </button>
+          </div>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    // Save individual current row to catalog directly
+    function saveCurrentRowToCatalog(index) {
+      const it = items[index];
+      if (!it || !it.desc) return;
+      savedCatalog.push({
+        id: 'c_' + Date.now(),
+        desc: it.desc,
+        hsn: it.hsn || '',
+        unit: it.unit || 'pc',
+        rate: it.rate || 0,
+        gstRate: it.gstRate || 0
+      });
+      updateBadgeCounts();
+      showToast(`Saved "${it.desc}" to catalog!`);
+    }
+
+    // Render interactive input rows
+    function renderItemInputs() {
+      const container = document.getElementById('itemInputsContainer');
+      container.innerHTML = '';
+
+      items.forEach((item, index) => {
+        const row = document.createElement('div');
+        row.className = 'p-2.5 bg-slate-50 border border-slate-200 rounded-lg space-y-1.5 text-xs';
+        const sub = (item.qty || 0) * (item.rate || 0);
+
+        row.innerHTML = `
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-slate-500 text-[11px]">#${index + 1}</span>
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] text-slate-500">Subtotal: ₹<strong>${inrFormat(sub)}</strong> (${item.gstRate || 0}% GST)</span>
+              <button type="button" onclick="saveCurrentRowToCatalog(${index})" title="Save to Reusable Catalog" class="text-slate-400 hover:text-amber-600 text-[10px] font-semibold bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                Save Item
+              </button>
+              ${items.length > 1 ? `
+                <button type="button" onclick="removeItem(${index})" class="text-slate-400 hover:text-red-500 ml-1 font-bold text-xs">
+                  ✕
+                </button>
+              ` : ''}
+            </div>
+          </div>
+          <div>
+            <input type="text" placeholder="Description of goods" value="${item.desc.replace(/"/g, '&quot;')}" oninput="updateItem(${index}, 'desc', this.value)" class="w-full px-2 py-1 border border-slate-200 rounded bg-white font-medium">
+          </div>
+          <div class="grid grid-cols-12 gap-1.5">
+            <div class="col-span-3">
+              <input type="text" placeholder="HSN" value="${item.hsn}" oninput="updateItem(${index}, 'hsn', this.value)" class="w-full px-1.5 py-1 border border-slate-200 rounded bg-white text-[11px] font-mono">
+            </div>
+            <div class="col-span-2">
+              <input type="number" step="any" placeholder="Qty" value="${item.qty}" oninput="updateItem(${index}, 'qty', parseFloat(this.value) || 0)" class="w-full px-1.5 py-1 border border-slate-200 rounded bg-white text-[11px] font-mono text-right">
+            </div>
+            <div class="col-span-2">
+              <input type="text" placeholder="Unit" value="${item.unit}" oninput="updateItem(${index}, 'unit', this.value)" class="w-full px-1.5 py-1 border border-slate-200 rounded bg-white text-[11px] text-center">
+            </div>
+            <div class="col-span-2">
+              <input type="number" step="any" placeholder="Rate" value="${item.rate}" oninput="updateItem(${index}, 'rate', parseFloat(this.value) || 0)" class="w-full px-1.5 py-1 border border-slate-200 rounded bg-white text-[11px] font-mono text-right">
+            </div>
+            <div class="col-span-3">
+              <select onchange="updateItem(${index}, 'gstRate', parseFloat(this.value))" class="w-full px-1 py-1 border border-slate-200 rounded bg-white text-[11px]">
+                <option value="0" ${item.gstRate === 0 ? 'selected' : ''}>0% Tax</option>
+                <option value="5" ${item.gstRate === 5 ? 'selected' : ''}>5% GST</option>
+                <option value="12" ${item.gstRate === 12 ? 'selected' : ''}>12% GST</option>
+                <option value="18" ${item.gstRate === 18 ? 'selected' : ''}>18% GST</option>
+                <option value="28" ${item.gstRate === 28 ? 'selected' : ''}>28% GST</option>
+              </select>
+            </div>
+          </div>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    function addItem() {
+      items.push({ desc: "", hsn: "", qty: 1, unit: "kg", rate: 0, gstRate: 0 });
+      renderItemInputs();
+      renderInvoice();
+    }
+
+    function removeItem(index) {
+      if (items.length > 1) {
+        items.splice(index, 1);
+        renderItemInputs();
+        renderInvoice();
+      }
+    }
+
+    function updateItem(index, key, val) {
+      items[index][key] = val;
+      renderInvoice();
+    }
+
+    // STAMP CONTROLS & HANDLERS
+    function toggleStampVisibility(show) {
+      const stampWrapper = document.getElementById('stampWrapper');
+      if (stampWrapper) {
+        stampWrapper.style.display = show ? 'flex' : 'none';
+      }
+    }
+
+    function changeStampColor(color) {
+      const svg = document.getElementById('svgStamp');
+      if (svg) {
+        svg.style.color = color;
+      }
+    }
+
+    function updateStampSize(val) {
+      const container = document.getElementById('stampContainer');
+      const label = document.getElementById('stampSizeVal');
+      if (container) {
+        container.style.width = `${val}px`;
+        container.style.height = `${val}px`;
+      }
+      if (label) label.textContent = `${val}px`;
+    }
+
+    function updateStampAngle(val) {
+      const container = document.getElementById('stampContainer');
+      const label = document.getElementById('stampAngleVal');
+      if (container) {
+        container.style.transform = `rotate(${val}deg)`;
+      }
+      if (label) label.textContent = `${val}°`;
+    }
+
+    function handleStampUpload(input) {
+      if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const svgStamp = document.getElementById('svgStamp');
+          const customImg = document.getElementById('customStampImg');
+          if (svgStamp && customImg) {
+            svgStamp.classList.add('hidden');
+            customImg.src = e.target.result;
+            customImg.classList.remove('hidden');
+          }
+          showToast('Custom stamp loaded!');
+        };
+        reader.readAsDataURL(input.files[0]);
+      }
+    }
+
+    // MAIN INVOICE & TAX CALCULATION ENGINE
+    function renderInvoice() {
+      // 1. Text synchronization
+      const bizName = document.getElementById('inpBizName').value || '';
+      document.getElementById('outBizName').textContent = bizName;
+      document.getElementById('outBizAddr1').textContent = document.getElementById('inpBizAddr1').value || '';
+      document.getElementById('outBizAddr2').textContent = document.getElementById('inpBizAddr2').value || '';
+      document.getElementById('outBizGstin').textContent = document.getElementById('inpBizGstin').value || '';
+
+      document.getElementById('outBuyerName').textContent = document.getElementById('inpBuyerName').value || '';
+      document.getElementById('outBuyerAddr1').textContent = document.getElementById('inpBuyerAddr1').value || '';
+      document.getElementById('outBuyerAddr2').textContent = document.getElementById('inpBuyerAddr2').value || '';
+
+      document.getElementById('outPosName').textContent = document.getElementById('inpPosName').value || '';
+      document.getElementById('outPosAddr1').textContent = document.getElementById('inpPosAddr1').value || '';
+      document.getElementById('outPosAddr2').textContent = document.getElementById('inpPosAddr2').value || '';
+
+      document.getElementById('outInvNo').textContent = document.getElementById('inpInvNo').value || '';
+      document.getElementById('outInvDate').textContent = document.getElementById('inpInvDate').value || '';
+
+      // Bank Details
+      document.getElementById('outAccHolder').textContent = document.getElementById('inpAccHolder').value || bizName;
+      document.getElementById('outChequeNote').textContent = document.getElementById('inpChequeNote').value || '';
+      document.getElementById('outBankName').textContent = document.getElementById('inpBankName').value || '';
+      document.getElementById('outBankAcc').textContent = document.getElementById('inpBankAcc').value || '';
+      document.getElementById('outBankIfsc').textContent = document.getElementById('inpBankIfsc').value || '';
+
+      // 2. Populate Bill Items & Gross Total
+      const itemsContainer = document.getElementById('outItemsList');
+      itemsContainer.innerHTML = '';
+
+      let grossTotal = 0;
+      const taxableBuckets = { 0: 0, 5: 0, 12: 0, 18: 0, 28: 0 };
+
+      items.forEach(item => {
+        const qty = item.qty || 0;
+        const rate = item.rate || 0;
+        const amount = qty * rate;
+        grossTotal += amount;
+
+        const rateKey = item.gstRate || 0;
+        if (taxableBuckets[rateKey] !== undefined) {
+          taxableBuckets[rateKey] += amount;
+        } else {
+          taxableBuckets[rateKey] = amount;
+        }
+
+        const row = document.createElement('div');
+        row.className = 'inv-grid-row text-[11px] leading-tight b-b';
+        row.innerHTML = `
+          <div class="p-1.5 b-r text-left truncate justify-start">${item.desc || '&nbsp;'}</div>
+          <div class="p-1.5 b-r text-center font-mono justify-center">${item.hsn || ''}</div>
+          <div class="p-1.5 b-r text-right pr-1.5 font-mono justify-end">${qty ? inrFormat(qty) : ''}</div>
+          <div class="p-1.5 b-r text-center justify-center">${item.unit || ''}</div>
+          <div class="p-1.5 b-r text-right pr-1.5 font-mono justify-end">${rate ? inrFormat(rate) : ''}</div>
+          <div class="p-1.5 text-right pr-2 font-mono font-medium justify-end">${amount ? inrFormat(amount) : ''}</div>
+        `;
+        itemsContainer.appendChild(row);
+      });
+
+      document.getElementById('outGrossTotal').textContent = inrFormat(grossTotal);
+
+      // 3. Tax Slabs & CGST/SGST Split Calculation
+      const taxContainer = document.getElementById('outTaxSection');
+      taxContainer.innerHTML = '';
+
+      let totalTaxAmount = 0;
+      [0, 5, 12, 18, 28].forEach(rate => {
+        const taxable = taxableBuckets[rate] || 0;
+        if (taxable > 0 || rate === 0) {
+          const row = document.createElement('div');
+          row.className = 'inv-summary-row py-1 px-1.5 b-b text-[10.5px] items-center';
+          row.innerHTML = `
+            <div class="text-left font-semibold">Taxable @${rate}%</div>
+            <div class="text-right pr-2 font-mono">${inrFormat(taxable)}</div>
+          `;
+          taxContainer.appendChild(row);
+
+          if (rate > 0) {
+            const halfRate = rate / 2;
+            const splitTax = taxable * (halfRate / 100);
+            totalTaxAmount += (splitTax * 2);
+
+            const cgstRow = document.createElement('div');
+            cgstRow.className = 'inv-summary-row py-1 px-1.5 b-b text-[10.5px] items-center';
+            cgstRow.innerHTML = `
+              <div class="text-left">CGST @${halfRate}%</div>
+              <div class="text-right pr-2 font-mono">${inrFormat(splitTax, 2)}</div>
+            `;
+            taxContainer.appendChild(cgstRow);
+
+            const sgstRow = document.createElement('div');
+            sgstRow.className = 'inv-summary-row py-1 px-1.5 b-b text-[10.5px] items-center';
+            sgstRow.innerHTML = `
+              <div class="text-left">SGST @${halfRate}%</div>
+              <div class="text-right pr-2 font-mono">${inrFormat(splitTax, 2)}</div>
+            `;
+            taxContainer.appendChild(sgstRow);
+          }
+        }
+      });
+
+      const exactTotal = grossTotal + totalTaxAmount;
+      const roundedTotal = Math.round(exactTotal);
+      const roundOff = roundedTotal - exactTotal;
+
+      const roundOffRow = document.createElement('div');
+      roundOffRow.className = 'inv-summary-row py-1 px-1.5 text-[10.5px] items-center';
+      roundOffRow.innerHTML = `
+        <div class="text-left">Round off</div>
+        <div class="text-right pr-2 font-mono">${roundOff === 0 ? '0.00' : (roundOff > 0 ? '+' : '') + roundOff.toFixed(2)}</div>
+      `;
+      taxContainer.appendChild(roundOffRow);
+
+      document.getElementById('outNetTotal').textContent = inrFormat(roundedTotal);
+
+      // Amount in pure text words without any number or prefix
+      const words = numberToWords(roundedTotal);
+      document.getElementById('outAmountWords').textContent = words;
+    }
+
+    // Direct standalone HTML5 Canvas generator: 100% immune to html2canvas SVG viewBox zooming or corner cropping
+    function generateFullStampCanvas(color) {
+      const size = 600;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const center = size / 2;
+
+      ctx.clearRect(0, 0, size, size);
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+
+      // 1. Outer Solid Circle (equivalent to r=190 in 440 box)
+      const outerR = (190 / 220) * (center - 24);
+      ctx.lineWidth = 11.5;
+      ctx.beginPath();
+      ctx.arc(center, center, outerR, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // 2. Inner Solid Circle (equivalent to r=126 in 440 box)
+      const innerR = (126 / 220) * (center - 24);
+      ctx.lineWidth = 5.2;
+      ctx.beginPath();
+      ctx.arc(center, center, innerR, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // 3. Perimeter Curved Text: "INDU KIRANA AND GENRAL STORE"
+      const textR = (outerR + innerR) / 2;
+      const text = "INDU KIRANA AND GENRAL STORE";
+      ctx.font = "bold 32px 'Arial', sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      // Angular sweep centered at the top (-90 degrees)
+      const totalAngle = 4.3; // spans ~246 degrees cleanly
+      const startAngle = -Math.PI / 2 - (totalAngle / 2);
+      const angleStep = totalAngle / (text.length - 1);
+
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        const angle = startAngle + (i * angleStep);
+        ctx.save();
+        ctx.translate(center, center);
+        ctx.rotate(angle + Math.PI / 2);
+        ctx.translate(0, -textR);
+        ctx.fillText(char, 0, 0);
+        ctx.restore();
+      }
+
+      // 4. 12 Outlined 5-Pointed Stars along inner perimeter
+      const starR = (106 / 220) * (center - 24);
+      function draw5PointStar(cx, cy, spikes, outerRadius, innerRadius) {
+        let rot = (Math.PI / 2) * 3;
+        let x = cx;
+        let y = cy;
+        const step = Math.PI / spikes;
+
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - outerRadius);
+        for (let i = 0; i < spikes; i++) {
+          x = cx + Math.cos(rot) * outerRadius;
+          y = cy + Math.sin(rot) * outerRadius;
+          ctx.lineTo(x, y);
+          rot += step;
+
+          x = cx + Math.cos(rot) * innerRadius;
+          y = cy + Math.sin(rot) * innerRadius;
+          ctx.lineTo(x, y);
+          rot += step;
+        }
+        ctx.lineTo(cx, cy - outerRadius);
+        ctx.closePath();
+        ctx.lineWidth = 4.2;
+        ctx.stroke();
+      }
+
+      for (let i = 0; i < 12; i++) {
+        const starAngle = (i * 30) * (Math.PI / 180) - Math.PI / 2;
+        const sx = center + Math.cos(starAngle) * starR;
+        const sy = center + Math.sin(starAngle) * starR;
+        draw5PointStar(sx, sy, 5, 17, 7.5);
+      }
+
+      // 5. Center Wordmark: VERIFIED
+      ctx.font = "900 48px 'Arial Black', sans-serif";
+      ctx.letterSpacing = "2px";
+      ctx.fillText("VERIFIED", center, center + 2);
+
+      return canvas.toDataURL('image/png');
+    }
+
+    // Direct 100% Reliable Native Browser "Save as PDF" Dialog
+    function triggerNativePrintPDF() {
+      showToast('Opening print dialog: Choose "Save as PDF" under Destination!');
+      setTimeout(() => {
+        window.print();
+      }, 250);
+    }
+
+    // Direct, Non-Blank 1-Click PDF Download with 100% full, uncropped stamp
+    async function downloadPDF() {
+      const btn = document.getElementById('btn-download');
+      const originalBtnText = btn.innerHTML;
+      btn.innerHTML = '<span>⏳</span> Generating PDF...';
+      btn.disabled = true;
+
+      const sheet = document.getElementById('invoiceSheet');
+      const invNo = document.getElementById('inpInvNo').value || 'Bill';
+      const showStamp = document.getElementById('chkShowStamp').checked;
+      const stampColor = document.getElementById('stampColorSelect').value || '#0b5ed7';
+      const svgStamp = document.getElementById('svgStamp');
+      const customImg = document.getElementById('customStampImg');
+      const hasCustomImg = customImg && !customImg.classList.contains('hidden') && customImg.src;
+
+      let tempStampImg = null;
+      if (showStamp && svgStamp && (!hasCustomImg)) {
+        try {
+          const exactDataUrl = generateFullStampCanvas(stampColor);
+          tempStampImg = document.createElement('img');
+          tempStampImg.src = exactDataUrl;
+          tempStampImg.style.width = '100%';
+          tempStampImg.style.height = '100%';
+          tempStampImg.style.maxWidth = '100%';
+          tempStampImg.style.maxHeight = '100%';
+          tempStampImg.style.objectFit = 'contain';
+          tempStampImg.style.display = 'block';
+
+          svgStamp.style.display = 'none';
+          svgStamp.parentNode.appendChild(tempStampImg);
+        } catch (e) {
+          console.warn('Canvas generator fallback:', e);
+        }
+      }
+
+      // Temporarily normalize sheet style for clean A4 snapshot
+      const originalShadow = sheet.style.boxShadow;
+      sheet.style.boxShadow = 'none';
+
+      // Ensure view is scrolled so no top offset cuts off content
+      window.scrollTo(0, 0);
+      await new Promise(r => setTimeout(r, 200));
+
+      const filename = `GST_Invoice_${invNo}.pdf`;
+      const opt = {
+        margin: [5, 5, 5, 5],
+        filename: filename,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          scrollY: 0,
+          scrollX: 0,
+          backgroundColor: '#ffffff'
+        },
+        jsPDF: {
+          unit: 'mm',
+          format: 'a4',
+          orientation: 'portrait'
+        }
+      };
+
+      try {
+        if (typeof html2pdf !== 'undefined') {
+          await html2pdf().set(opt).from(sheet).save();
+          showToast(`Saved as "${filename}"! Check your Downloads folder.`);
+        } else {
+          showToast('Direct download blocked. Opening Print: select "Save as PDF"');
+          window.print();
+        }
+      } catch (err) {
+        console.error('PDF generation error, falling back to print:', err);
+        showToast('Direct download blocked by browser. Opening Print dialog...');
+        window.print();
+      } finally {
+        if (tempStampImg && tempStampImg.parentNode) {
+          tempStampImg.parentNode.removeChild(tempStampImg);
+        }
+        if (svgStamp) {
+          svgStamp.style.display = '';
+        }
+        sheet.style.boxShadow = originalShadow;
+        btn.innerHTML = originalBtnText;
+        btn.disabled = false;
+      }
+    }
+
+    // Responsive Mobile Tab Switcher
+    function setMobileTab(tab) {
+      const formEl = document.getElementById('formSection');
+      const prevEl = document.getElementById('previewSection');
+      const bForm = document.getElementById('tabBtnForm');
+      const bPrev = document.getElementById('tabBtnPreview');
+
+      if (tab === 'form') {
+        formEl.classList.remove('hidden');
+        prevEl.classList.add('hidden');
+        bForm.className = "flex-1 py-1.5 text-center text-xs font-bold bg-white text-indigo-600 rounded shadow";
+        bPrev.className = "flex-1 py-1.5 text-center text-xs font-bold text-slate-600 rounded";
+      } else {
+        formEl.classList.add('hidden');
+        prevEl.classList.remove('hidden');
+        bPrev.className = "flex-1 py-1.5 text-center text-xs font-bold bg-white text-indigo-600 rounded shadow";
+        bForm.className = "flex-1 py-1.5 text-center text-xs font-bold text-slate-600 rounded";
+      }
+    }
+  </script>
+</body>
+</html>
